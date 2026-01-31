@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
-import '../../services/comment_service.dart';
-import '../../models/comment_data.dart';
+import 'package:zuno/features/comments/models/comment_model.dart';
+import 'package:zuno/services/comment_service.dart';
 
-class CommentSheet extends StatefulWidget {
+class CommentsSheet extends StatefulWidget {
   final String postId;
 
-  const CommentSheet({super.key, required this.postId});
+  const CommentsSheet({super.key, required this.postId});
 
   @override
-  State<CommentSheet> createState() => _CommentSheetState();
+  State<CommentsSheet> createState() => _CommentsSheetState();
 }
 
-class _CommentSheetState extends State<CommentSheet> {
+class _CommentsSheetState extends State<CommentsSheet> {
   final TextEditingController _controller = TextEditingController();
 
-  Future<void> _addComment() async {
+  Future<void> _sendComment() async {
     if (_controller.text.trim().isEmpty) return;
 
     await CommentService().addComment(
       postId: widget.postId,
-      username: 'Raja', // later from auth
       content: _controller.text.trim(),
     );
 
@@ -28,26 +27,25 @@ class _CommentSheetState extends State<CommentSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: MediaQuery.of(context).viewInsets,
-      child: SizedBox(
-        height: MediaQuery.of(context).size.height * 0.7,
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: Column(
           children: [
             const SizedBox(height: 12),
             const Text(
               "Comments",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const Divider(),
 
-            /// 🔴 REALTIME COMMENTS
+            // 🔥 REAL-TIME COMMENTS
             Expanded(
-              child: StreamBuilder<List<CommentData>>(
-                stream: CommentService().streamComments(widget.postId),
+              child: StreamBuilder<List<CommentModel>>(
+                stream: CommentService()
+                    .commentsStream(widget.postId),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return const Center(
@@ -71,7 +69,7 @@ class _CommentSheetState extends State<CommentSheet> {
                         title: Text(
                           c.username,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                         subtitle: Text(c.content),
@@ -82,29 +80,22 @@ class _CommentSheetState extends State<CommentSheet> {
               ),
             ),
 
-            /// INPUT
+            // Input
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(8),
               child: Row(
                 children: [
                   Expanded(
                     child: TextField(
                       controller: _controller,
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         hintText: "Add a comment...",
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.send),
-                    onPressed: _addComment,
+                    onPressed: _sendComment,
                   ),
                 ],
               ),

@@ -1,25 +1,22 @@
 class CommentModel {
   final String id;
-  final String postId;
+  final String username;
   final String content;
   final DateTime createdAt;
-  final String? username;
 
   CommentModel({
     required this.id,
-    required this.postId,
+    required this.username,
     required this.content,
     required this.createdAt,
-    this.username,
   });
 
-  factory CommentModel.fromJson(Map<String, dynamic> json) {
+  factory CommentModel.fromMap(Map<String, dynamic> map) {
     return CommentModel(
-      id: json['id'],
-      postId: json['post_id'],
-      content: json['content'],
-      createdAt: DateTime.parse(json['created_at']),
-      username: json['username'],
+      id: map['id'],
+      username: map['username'],
+      content: map['content'],
+      createdAt: DateTime.parse(map['created_at']),
     );
   }
 }

@@ -1,37 +1,143 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/post_data.dart';
+import 'package:zuno/features/feed/models/post_model.dart';
 
 class PostService {
-  final _client = Supabase.instance.client;
+  final SupabaseClient _supabase = Supabase.instance.client;
 
-  Future<List<PostData>> fetchPosts() async {
-    final res = await _client
+  // ─────────────────────────
+  // CREATE POST
+  // ─────────────────────────
+  Future<void> createPost({
+    required String imageUrl,
+    required String caption,
+    required String username,
+    required List<String> topics,
+  }) async {
+    final userId = _supabase.auth.currentUser!.id;
+
+    await _supabase.from('posts').insert({
+      'image_url': imageUrl,
+      'caption': caption,
+      'username': username,
+      'user_id': userId,
+      'topics': topics,
+    });
+  }
+
+  // ─────────────────────────
+  // NORMAL FEED (PAGINATED)
+  // ─────────────────────────
+  Future<List<PostModel>> fetchPostsPaged({
+    required int limit,
+    required int offset,
+  }) async {
+    final userId = _supabase.auth.currentUser?.id;
+
+    final response = await _supabase
         .from('posts')
-        .select()
-        .order('created_at', ascending: false);
+        .select('''
+          id,
+          image_url,
+          caption,
+          username,
+          created_at,
+          likes_count,
+          comments_count,
+          likes ( user_id )
+        ''')
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1);
 
-    return (res as List).map((p) {
-      return PostData(
-        id: p['id'].toString(),
-        username: p['username'] ?? 'User',
-        imageUrl: p['image_url'],
-        likes: p['likes'] ?? 0,
-        comments: p['comments'] ?? 0,
-        time: 'Just now',
-      );
+    return response.map<PostModel>((e) {
+      return PostModel.fromMap(e, currentUserId: userId);
     }).toList();
   }
 
-  Future<void> createPost({
-    required String username,
-    required String imageUrl,
+  // ─────────────────────────
+  // SIMPLE FEED (NON-PAGINATED)
+  // ─────────────────────────
+  Future<List<PostModel>> fetchPosts() async {
+    final userId = _supabase.auth.currentUser?.id;
+
+    final response = await _supabase
+        .from('posts')
+        .select('''
+          id,
+          image_url,
+          caption,
+          username,
+          created_at,
+          likes_count,
+          comments_count,
+          likes ( user_id )
+        ''')
+        .order('created_at', ascending: false);
+
+    return response.map<PostModel>((e) {
+      return PostModel.fromMap(e, currentUserId: userId);
+    }).toList();
+  }
+
+  // ─────────────────────────
+  // PROFILE FEED
+  // ─────────────────────────
+  Future<List<PostModel>> fetchPostsByUser(String userId) async {
+    final response = await _supabase
+        .from('posts')
+        .select('''
+          id,
+          image_url,
+          caption,
+          username,
+          created_at,
+          likes_count,
+          comments_count,
+          likes ( user_id )
+        ''')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+
+    return response.map<PostModel>((e) {
+      return PostModel.fromMap(e, currentUserId: userId);
+    }).toList();
+  }
+
+  // ─────────────────────────
+  // TRENDING FEED
+  // ─────────────────────────
+  Future<List<PostModel>> fetchTrendingPosts({
+    required int limit,
   }) async {
-    await _client.from('posts').insert({
-      'username': username,
-      'image_url': imageUrl,
-      'likes': 0,
-      'comments': 0,
-      'created_at': DateTime.now().toIso8601String(),
-    });
+    final userId = _supabase.auth.currentUser?.id;
+
+    final response = await _supabase.rpc(
+      'get_trending_posts',
+      params: {'limit_count': limit},
+    );
+
+    return response.map<PostModel>((e) {
+      return PostModel.fromMap(e, currentUserId: userId);
+    }).toList();
+  }
+
+  // ─────────────────────────
+  // PERSONALIZED FEED
+  // ─────────────────────────
+  Future<List<PostModel>> fetchPersonalizedFeed({
+    required int limit,
+  }) async {
+    final userId = _supabase.auth.currentUser!.id;
+
+    final response = await _supabase.rpc(
+      'get_personalized_feed',
+      params: {
+        'uid': userId,
+        'limit_count': limit,
+      },
+    );
+
+    return response.map<PostModel>((e) {
+      return PostModel.fromMap(e, currentUserId: userId);
+    }).toList();
   }
 }

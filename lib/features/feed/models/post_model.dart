@@ -1,38 +1,55 @@
 class PostModel {
   final String id;
+  final String imageUrl;
+  final List<String> imageUrls;
+  final String? videoUrl;
   final String caption;
   final String username;
-  final int likeCount;
-  final String communityTag;
+  final DateTime createdAt;
 
-  // ✅ ADD THESE (they were missing)
-  final String? city;
-  final String? college;
-  final String? region;
+  bool isLiked;
+  int likesCount;
+  int commentsCount;
 
   PostModel({
     required this.id,
+    required this.imageUrl,
+    required this.imageUrls,
     required this.caption,
     required this.username,
-    required this.likeCount,
-    required this.communityTag,
-    this.city,
-    this.college,
-    this.region,
+    required this.createdAt,
+    required this.likesCount,
+    required this.commentsCount,
+    required this.isLiked,
+    this.videoUrl,
   });
 
-  factory PostModel.fromJson(Map<String, dynamic> json) {
-    return PostModel(
-      id: json['id']?.toString() ?? '',
-      caption: json['caption'] ?? '',
-      username: json['username'] ?? 'User',
-      likeCount: json['like_count'] ?? 0,
-      communityTag: json['community_tag'] ?? 'city',
+  factory PostModel.fromMap(
+      Map<String, dynamic> map, {
+        String? currentUserId,
+      }) {
+    final likes = map['likes'] as List? ?? [];
 
-      // ✅ SAFE nullable parsing
-      city: json['city'],
-      college: json['college'],
-      region: json['region'],
+    final List<String> imageUrls =
+        (map['image_urls'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
+            (map['image_url'] != null
+                ? [map['image_url'].toString()]
+                : []);
+
+    return PostModel(
+      id: map['id'].toString(),
+      imageUrl: imageUrls.isNotEmpty ? imageUrls.first : '',
+      imageUrls: imageUrls,
+      videoUrl: map['video_url'], // 🎥
+      caption: map['caption'] ?? '',
+      username: map['username'] ?? '',
+      createdAt: DateTime.parse(map['created_at']),
+      likesCount: map['likes_count'] ?? likes.length,
+      isLiked: currentUserId != null &&
+          likes.any((l) => l['user_id'] == currentUserId),
+      commentsCount: map['comments_count'] ?? 0,
     );
   }
 }

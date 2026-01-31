@@ -1,10 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../core/design/zuno_app_bar.dart';
-import '../../services/post_service.dart';
-import '../../services/image_upload_service.dart';
-import '../../models/post_data.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:zuno/services/post_service.dart';
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key});
@@ -14,29 +13,62 @@ class CreatePostScreen extends StatefulWidget {
 }
 
 class _CreatePostScreenState extends State<CreatePostScreen> {
-  final captionController = TextEditingController();
+  final TextEditingController captionController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
 
-  File? _selectedImage;
-  String _selectedCommunity = 'city';
+  List<File> _selectedImages = [];
   bool _loading = false;
 
-  Future<void> _pickImage() async {
-    final picked =
-    await _picker.pickImage(source: ImageSource.gallery);
+  // ─────────────────────────
+  // PICK MULTIPLE IMAGES
+  // ─────────────────────────
+  Future<void> _pickImages() async {
+    final images = await _picker.pickMultiImage(imageQuality: 85);
 
-    if (picked != null) {
+    if (images.isNotEmpty) {
       setState(() {
-        _selectedImage = File(picked.path);
+        _selectedImages = images.map((e) => File(e.path)).toList();
       });
     }
   }
 
+  // ─────────────────────────
+  // UPLOAD IMAGE → SUPABASE
+  // ─────────────────────────
+  Future<String> _uploadImage(File file) async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser!;
+
+    final fileName =
+        '${user.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+    await supabase.storage.from('post-images').upload(
+      fileName,
+      file,
+      fileOptions: const FileOptions(upsert: false),
+    );
+
+    return supabase.storage
+        .from('post-images')
+        .getPublicUrl(fileName);
+  }
+
+  // ─────────────────────────
+  // SUBMIT POST
+  // ─────────────────────────
   Future<void> _submitPost() async {
-    if (_selectedImage == null ||
-        captionController.text.isEmpty) {
+    final caption = captionController.text.trim();
+
+    if (_selectedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Select image & caption")),
+        const SnackBar(content: Text("Select at least one image")),
+      );
+      return;
+    }
+
+    if (caption.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Caption cannot be empty")),
       );
       return;
     }
@@ -44,149 +76,123 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     setState(() => _loading = true);
 
     try {
-      final imageUrl = await ImageUploadService()
-          .uploadPostImage(_selectedImage!);
+      final user = Supabase.instance.client.auth.currentUser!;
+      final username = user.email?.split('@').first ?? 'user';
 
+      // 🔥 Upload all images
+      final imageUrls = <String>[];
+      for (final file in _selectedImages) {
+        final url = await _uploadImage(file);
+        imageUrls.add(url);
+      }
+
+      // 🧠 Feed currently uses single image → use first
       await PostService().createPost(
-        imageUrl: imageUrl,
-        username: 'Raja',
+        imageUrl: imageUrls.first,
+        caption: caption,
+        username: username,
+        topics: _extractTopics(caption),
       );
 
-
-      Navigator.pop(context);
+      if (!mounted) return;
+      Navigator.pop(context, true);
     } catch (e) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // ─────────────────────────
+  // AUTO TOPICS
+  // ─────────────────────────
+  List<String> _extractTopics(String caption) {
+    final lower = caption.toLowerCase();
+    final topics = <String>[];
+
+    if (lower.contains('flutter')) topics.add('flutter');
+    if (lower.contains('college')) topics.add('college');
+    if (lower.contains('fitness') || lower.contains('gym')) {
+      topics.add('fitness');
+    }
+    if (lower.contains('coding')) topics.add('coding');
+    if (lower.contains('travel')) topics.add('travel');
+
+    if (topics.isEmpty) topics.add('general');
+    return topics;
+  }
+
+  @override
+  void dispose() {
+    captionController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F9F9),
-      appBar: zunoAppBar(title: "Create Post"),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            /// IMAGE PICKER
-            GestureDetector(
-              onTap: _pickImage,
-              child: Container(
-                height: 180,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade300),
+      appBar: AppBar(
+        title: const Text("New Post"),
+        actions: [
+          TextButton(
+            onPressed: _loading ? null : _submitPost,
+            child: _loading
+                ? const SizedBox(
+              height: 18,
+              width: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+                : const Text(
+              "Share",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+
+      // ───────── BODY ─────────
+      body: Column(
+        children: [
+          GestureDetector(
+            onTap: _pickImages,
+            child: Container(
+              height: 300,
+              width: double.infinity,
+              color: Colors.grey.shade200,
+              child: _selectedImages.isEmpty
+                  ? const Center(
+                child: Icon(Icons.add_a_photo, size: 40),
+              )
+                  : CarouselSlider(
+                options: CarouselOptions(
+                  height: 300,
+                  viewportFraction: 1,
+                  enableInfiniteScroll: false,
                 ),
-                alignment: Alignment.center,
-                child: _selectedImage == null
-                    ? const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.photo,
-                        size: 40, color: Colors.grey),
-                    SizedBox(height: 8),
-                    Text("Tap to select image"),
-                  ],
-                )
-                    : ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.file(
-                    _selectedImage!,
+                items: _selectedImages.map((file) {
+                  return Image.file(
+                    file,
                     fit: BoxFit.cover,
                     width: double.infinity,
-                  ),
-                ),
+                  );
+                }).toList(),
               ),
             ),
+          ),
 
-            const SizedBox(height: 16),
-
-            /// CAPTION
-            TextField(
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
               controller: captionController,
               maxLines: 3,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: "Write a caption...",
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
+                border: InputBorder.none,
               ),
             ),
-
-            const SizedBox(height: 16),
-
-            /// COMMUNITY DROPDOWN
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedCommunity,
-                  isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'city',
-                      child: Text("📍 City"),
-                    ),
-                    DropdownMenuItem(
-                      value: 'college',
-                      child: Text("🎓 College"),
-                    ),
-                    DropdownMenuItem(
-                      value: 'festival',
-                      child: Text("🎉 Festival"),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _selectedCommunity = value);
-                    }
-                  },
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            /// POST BUTTON
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  padding:
-                  const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                onPressed: _loading ? null : _submitPost,
-                child: _loading
-                    ? const CircularProgressIndicator(
-                  color: Colors.white,
-                )
-                    : const Text(
-                  "Post",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

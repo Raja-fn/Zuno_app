@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import '../../core/design/zuno_colors.dart';
-import '../../core/design/zuno_text.dart';
-import '../feed/feed_screen.dart';
-import '../feed/trending_screen.dart';
-import '../profile/profile_screen.dart';
-import'package:zuno/features/community/community_screen.dart';
-import '../notifications/notifications_screen.dart';
+
+import 'package:zuno/core/design/zuno_colors.dart';
+import 'package:zuno/core/design/zuno_text.dart';
+
+import 'package:zuno/features/feed/feed_screen.dart';
+import 'package:zuno/features/feed/trending_screen.dart';
+import 'package:zuno/features/community/community_screen.dart';
+import 'package:zuno/features/notifications/notifications_screen.dart';
+import 'package:zuno/features/profile/profile_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -18,20 +20,19 @@ class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = const [
-    FeedScreen(),          // Home feed
-    TrendingScreen(),      // Trending feed
-    CommunityScreen(),     // Community selector/feed
-    NotificationsScreen(), // Likes, comments, activity
-    ProfileScreen(),       // Profile
+    FeedScreen(),                    // Home feed
+    TrendingScreen(),                // Trending feed
+    CommunityScreen(),               // Community
+    NotificationsScreen(),           // Notifications
+    ProfileScreen(userId: 'test-user-id'), // Profile
   ];
-
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: ZunoColors.background,
 
-      // ───────── Top App Bar ─────────
+      // ───────── App Bar ─────────
       appBar: AppBar(
         elevation: 0,
         backgroundColor: ZunoColors.background,

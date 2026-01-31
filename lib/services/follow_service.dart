@@ -1,49 +1,51 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FollowService {
-  final _client = Supabase.instance.client;
+  final _supabase = Supabase.instance.client;
 
-  Future<void> followUser(String targetUserId) async {
-    await _client.from('follows').insert({
-      'follower_id': _client.auth.currentUser!.id,
-      'following_id': targetUserId,
+  Future<void> follow(String userId) async {
+    final currentUser = _supabase.auth.currentUser!.id;
+
+    await _supabase.from('follows').insert({
+      'follower_id': currentUser,
+      'following_id': userId,
     });
   }
 
-  Future<void> unfollowUser(String targetUserId) async {
-    await _client
+  Future<void> unfollow(String userId) async {
+    final currentUser = _supabase.auth.currentUser!.id;
+
+    await _supabase
         .from('follows')
         .delete()
-        .eq('follower_id', _client.auth.currentUser!.id)
-        .eq('following_id', targetUserId);
+        .match({
+      'follower_id': currentUser,
+      'following_id': userId,
+    });
   }
 
-  Future<bool> isFollowing(String targetUserId) async {
-    final res = await _client
+  Future<bool> isFollowing(String userId) async {
+    final currentUser = _supabase.auth.currentUser!.id;
+
+    final res = await _supabase
         .from('follows')
         .select()
-        .eq('follower_id', _client.auth.currentUser!.id)
-        .eq('following_id', targetUserId)
+        .match({
+      'follower_id': currentUser,
+      'following_id': userId,
+    })
         .maybeSingle();
 
     return res != null;
   }
 
   Future<int> followersCount(String userId) async {
-    final res = await _client
-        .from('follows')
-        .select()
-        .eq('following_id', userId);
-
-    return res.length;
+    final res = await _supabase.rpc('followers_count', params: {'uid': userId});
+    return res as int;
   }
 
   Future<int> followingCount(String userId) async {
-    final res = await _client
-        .from('follows')
-        .select()
-        .eq('follower_id', userId);
-
-    return res.length;
+    final res = await _supabase.rpc('following_count', params: {'uid': userId});
+    return res as int;
   }
 }

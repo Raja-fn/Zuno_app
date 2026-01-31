@@ -23,7 +23,7 @@ class _AppShellState extends State<AppShell> {
     TrendingScreen(),       // 1
     CommunityScreen(),      // 2
     NotificationsScreen(),  // 3
-    ProfileScreen(),        // 4
+    ProfileScreen(userId: 'test-user-id'), // 4
   ];
 
   @override
