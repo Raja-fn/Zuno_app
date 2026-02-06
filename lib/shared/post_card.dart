@@ -24,21 +24,33 @@ class _PostCardState extends State<PostCard> {
   @override
   void initState() {
     super.initState();
-    final p = widget.post as dynamic;
-    _postId = (p['id'] ?? p['post_id'] ?? '').toString();
-    _likes = (p['likes_count'] ?? p['likesCount'] ?? 0) as int;
-    _comments = (p['comments_count'] ?? p['commentsCount'] ?? 0) as int;
-    _vibes = (p['vibe_count'] ?? p['vibes'] ?? 0) as int;
-    _authorId = (p['user_id'] ?? p['userId'] ?? '').toString();
-    final currentUser = Supabase.instance.client.auth.currentUser?.id;
-    _isOwner = currentUser != null && currentUser == _authorId;
+    final p = widget.post;
+    try {
+      if (p is Map) {
+        _postId = '${p['id'] ?? p['post_id'] ?? ''}';
+        _likes = (p['likes_count'] ?? p['likesCount'] ?? 0) as int;
+        _comments = (p['comments_count'] ?? p['commentsCount'] ?? 0) as int;
+        _vibes = (p['vibe_count'] ?? p['vibes'] ?? 0) as int;
+        _authorId = '${p['user_id'] ?? p['userId'] ?? ''}';
+        _liked = (p['liked'] ?? false) as bool;
+      } else {
+        _postId = (p.id ?? '').toString();
+        _authorId = (p.user_id ?? p.userId ?? '').toString();
+        _liked = false;
+        _likes = 0;
+        _comments = 0;
+        _vibes = 0;
+      }
+    } catch (_) {}
+    final current = Supabase.instance.client.auth.currentUser?.id;
+    _isOwner = current != null && _authorId.isNotEmpty && current == _authorId;
     if (!_isOwner && _authorId.isNotEmpty) {
-      ProfileService().isFollowing(currentUser ?? '', _authorId).then((v) {
+      ProfileService().isFollowing(current ?? '', _authorId).then((v) {
         if (!mounted) return;
         setState(() => _isFollowing = v);
       });
     }
-    _liked = (p['liked'] ?? false) as bool;
+    _liked = (p is Map) ? (p['liked'] ?? false) as bool : false;
   }
 
   Future<void> _toggleLike() async {
@@ -52,30 +64,29 @@ class _PostCardState extends State<PostCard> {
 
   Future<void> _toggleFollowAuthor() async {
     if (_authorId.isEmpty) return;
-    final currentUser = Supabase.instance.client.auth.currentUser?.id;
-    if (currentUser == null || currentUser == _authorId) return;
-    await ProfileService().toggleFollow(currentUser, _authorId);
-    final nowFollowing = await ProfileService().isFollowing(currentUser, _authorId);
+    final current = Supabase.instance.client.auth.currentUser?.id;
+    if (current == null || current == _authorId) return;
+    await ProfileService().toggleFollow(current, _authorId);
+    final nowFollowing = await ProfileService().isFollowing(current, _authorId);
     if (mounted) setState(() => _isFollowing = nowFollowing);
   }
 
   @override
   Widget build(BuildContext context) {
     final p = widget.post as dynamic;
-    final imageUrl = p['image_url'] ?? p['imageUrl'];
-    final caption = p['caption'] ?? '';
-    final username = p['username'] ?? '';
+    final imageUrl = (p is Map) ? (p['image_url'] ?? p['imageUrl'] ?? '') : '';
+    final caption = (p is Map) ? (p['caption'] ?? '') : '';
+    final username = (p is Map) ? (p['username'] ?? '') : '';
     final currentUser = Supabase.instance.client.auth.currentUser?.id;
-    final showFollow = _authorId.isNotEmpty && currentUser != null && _authorId != currentUser;
+    final authorId = (p is Map) ? (p['user_id'] ?? p['userId'] ?? '') : '';
+    final showFollow = authorId.toString().isNotEmpty && currentUser != null && authorId.toString() != currentUser;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          imageUrl != null && imageUrl.toString().isNotEmpty
-              ? Image.network(imageUrl)
-              : Container(height: 180, color: Colors.grey.shade200),
+          imageUrl.isNotEmpty ? Image.network(imageUrl) : Container(height: 180, color: Colors.grey.shade200),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Text(caption.toString(), maxLines: 2, overflow: TextOverflow.ellipsis),
