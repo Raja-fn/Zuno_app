@@ -1,40 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:zuno/features/auth/auth_gate.dart';
 
-import 'core/config/supabase_config.dart';
-import 'features/auth/auth_gate.dart';
-import 'features/clips/clips_screen.dart';
-import 'features/community/community_screen.dart';
-import 'features/navigation/app_shell.dart';
-
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SupabaseConfig.initialize();
-  runApp(const ZunoApp());
+
+  await Supabase.initialize(
+    url: 'https://gtveetggzpbmnzbkyrpz.supabase.co',
+    anonKey: 'sb_publishable_giyZUW_SITPt_akwaK0KOQ_pJBeXXK5',
+  );
+
+  runApp(const MyApp());
 }
 
-class ZunoApp extends StatelessWidget {
-  const ZunoApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const AuthGate(),
-        routes: {
-          '/community': (context) => const CommunityScreen(
-          ),
-        },
+      home: AuthGate(),
+      // Global typography: Open Sans by Google Fonts (professional, clean)
+      theme: ThemeData.light().copyWith(
+        textTheme: GoogleFonts.openSansTextTheme(ThemeData.light().textTheme),
+      ),
     );
   }
 }
-Future<bool> hasProfile(String userId) async {
-  final res = await Supabase.instance.client
-      .from('profiles')
-      .select()
-      .eq('id', userId)
-      .maybeSingle();
-
-  return res != null;
-}
-

@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../services/profile_service.dart';
 import '../navigation/main_navigation.dart';
+import '../onboarding/follow_suggestions_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -11,72 +13,115 @@ class ProfileSetupScreen extends StatefulWidget {
 }
 
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
-  final _usernameCtrl = TextEditingController();
-  final _bioCtrl = TextEditingController();
-  bool _loading = false;
+  final SupabaseClient _supabase = Supabase.instance.client;
 
-  Future<void> _submit() async {
-    if (_usernameCtrl.text.trim().isEmpty) return;
+  final usernameCtrl = TextEditingController();
+  final bioCtrl = TextEditingController();
 
-    setState(() => _loading = true);
+  File? avatar;
+  bool loading = false;
 
-    final userId = Supabase.instance.client.auth.currentUser!.id;
-
-    await ProfileService().createProfile(
-      userId: userId,
-      username: _usernameCtrl.text.trim(),
-      bio: _bioCtrl.text.trim(),
+  Future<void> _pickAvatar() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
     );
+
+    if (picked != null) {
+      setState(() => avatar = File(picked.path));
+    }
+  }
+
+  Future<void> _completeProfile() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    setState(() => loading = true);
+
+    String? avatarUrl;
+
+    // 1️⃣ Upload avatar
+    if (avatar != null) {
+      final path = '${user.id}/avatar.jpg';
+
+      await _supabase.storage.from('avatars').upload(
+        path,
+        avatar!,
+        fileOptions: const FileOptions(upsert: true),
+      );
+
+      avatarUrl =
+          _supabase.storage.from('avatars').getPublicUrl(path);
+    }
+
+    // 2️⃣ Update profile
+    await _supabase.from('profiles').update({
+      'username': usernameCtrl.text.trim(),
+      'bio': bioCtrl.text.trim(),
+      'avatar_url': avatarUrl,
+    }).eq('id', user.id);
 
     if (!mounted) return;
 
-    Navigator.pushAndRemoveUntil(
+    Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const MainNavigation()),
-          (_) => false,
+      MaterialPageRoute(
+        builder: (_) => const FollowSuggestionsScreen(),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text("Set up your profile"),
-        elevation: 0,
-      ),
+      appBar: AppBar(title: const Text("Set up profile")),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const CircleAvatar(
-              radius: 40,
-              backgroundColor: Colors.grey,
-              child: Icon(Icons.person, size: 40, color: Colors.white),
+            const SizedBox(height: 20),
+
+            GestureDetector(
+              onTap: _pickAvatar,
+              child: CircleAvatar(
+                radius: 48,
+                backgroundImage:
+                avatar != null ? FileImage(avatar!) : null,
+                child: avatar == null
+                    ? const Icon(Icons.add_a_photo, size: 28)
+                    : null,
+              ),
             ),
+
             const SizedBox(height: 20),
 
             TextField(
-              controller: _usernameCtrl,
+              controller: usernameCtrl,
               decoration: const InputDecoration(
-                labelText: "Username",
+                hintText: "Username",
+                filled: true,
               ),
             ),
+
             const SizedBox(height: 12),
 
             TextField(
-              controller: _bioCtrl,
+              controller: bioCtrl,
+              maxLines: 3,
               decoration: const InputDecoration(
-                labelText: "Bio",
+                hintText: "Bio",
+                filled: true,
               ),
             ),
+
             const SizedBox(height: 24),
 
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _loading ? null : _submit,
-                child: _loading
+                onPressed: loading ? null : _completeProfile,
+                child: loading
                     ? const CircularProgressIndicator()
                     : const Text("Continue"),
               ),

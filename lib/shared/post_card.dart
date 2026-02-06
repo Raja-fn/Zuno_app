@@ -1,136 +1,114 @@
 import 'package:flutter/material.dart';
-import 'package:carousel_slider/carousel_slider.dart';
-import 'package:video_player/video_player.dart';
-import 'package:zuno/features/feed/models/post_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:zuno/services/post_service.dart';
+import 'package:zuno/services/profile_service.dart';
 
-class PostCard extends StatelessWidget {
-  final PostModel post;
-
-  const PostCard({super.key, required this.post});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      elevation: 0,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ListTile(
-            title: Text(
-              post.username,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-
-          _PostMedia(post: post),
-
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(post.caption),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────
-// MEDIA HANDLER
-// ─────────────────────────
-class _PostMedia extends StatelessWidget {
-  final PostModel post;
-
-  const _PostMedia({required this.post});
+class PostCard extends StatefulWidget {
+  final dynamic post;
+  const PostCard({Key? key, required this.post}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    // 🎥 VIDEO POST
-    if (post.videoUrl != null && post.videoUrl!.isNotEmpty) {
-      return _VideoPlayer(url: post.videoUrl!);
-    }
-
-    // 📸 MULTI IMAGE
-    if (post.imageUrls.length > 1) {
-      return CarouselSlider(
-        options: CarouselOptions(
-          height: 300,
-          viewportFraction: 1,
-          enableInfiniteScroll: false,
-        ),
-        items: post.imageUrls.map((url) {
-          return Image.network(
-            url,
-            fit: BoxFit.cover,
-            width: double.infinity,
-          );
-        }).toList(),
-      );
-    }
-
-    // 📸 SINGLE IMAGE
-    if (post.imageUrls.isNotEmpty) {
-      return Image.network(
-        post.imageUrls.first,
-        fit: BoxFit.cover,
-        width: double.infinity,
-      );
-    }
-
-    // ❌ FALLBACK
-    return const SizedBox(
-      height: 300,
-      child: Center(child: Icon(Icons.image)),
-    );
-  }
+  State<PostCard> createState() => _PostCardState();
 }
 
-// ─────────────────────────
-// VIDEO PLAYER (AUTOPLAY)
-// ─────────────────────────
-class _VideoPlayer extends StatefulWidget {
-  final String url;
-
-  const _VideoPlayer({required this.url});
-
-  @override
-  State<_VideoPlayer> createState() => _VideoPlayerState();
-}
-
-class _VideoPlayerState extends State<_VideoPlayer> {
-  late VideoPlayerController _controller;
+class _PostCardState extends State<PostCard> {
+  bool _liked = false;
+  int _likes = 0;
+  int _comments = 0;
+  int _vibes = 0;
+  String _postId = '';
+  String _authorId = '';
+  bool _isOwner = false;
+  bool _isFollowing = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.network(widget.url)
-      ..initialize().then((_) {
-        _controller
-          ..setLooping(true)
-          ..setVolume(0)
-          ..play();
-        setState(() {});
+    final p = widget.post as dynamic;
+    _postId = (p['id'] ?? p['post_id'] ?? '').toString();
+    _likes = (p['likes_count'] ?? p['likesCount'] ?? 0) as int;
+    _comments = (p['comments_count'] ?? p['commentsCount'] ?? 0) as int;
+    _vibes = (p['vibe_count'] ?? p['vibes'] ?? 0) as int;
+    _authorId = (p['user_id'] ?? p['userId'] ?? '').toString();
+    final currentUser = Supabase.instance.client.auth.currentUser?.id;
+    _isOwner = currentUser != null && currentUser == _authorId;
+    if (!_isOwner && _authorId.isNotEmpty) {
+      ProfileService().isFollowing(currentUser ?? '', _authorId).then((v) {
+        if (!mounted) return;
+        setState(() => _isFollowing = v);
       });
+    }
+    _liked = (p['liked'] ?? false) as bool;
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  Future<void> _toggleLike() async {
+    if (_postId.isEmpty) return;
+    await PostService().toggleLike(_postId);
+    setState(() {
+      _liked = !_liked;
+      _likes = _liked ? _likes + 1 : (_likes > 0 ? _likes - 1 : 0);
+    });
+  }
+
+  Future<void> _toggleFollowAuthor() async {
+    if (_authorId.isEmpty) return;
+    final currentUser = Supabase.instance.client.auth.currentUser?.id;
+    if (currentUser == null || currentUser == _authorId) return;
+    await ProfileService().toggleFollow(currentUser, _authorId);
+    final nowFollowing = await ProfileService().isFollowing(currentUser, _authorId);
+    if (mounted) setState(() => _isFollowing = nowFollowing);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_controller.value.isInitialized) {
-      return const SizedBox(
-        height: 300,
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
+    final p = widget.post as dynamic;
+    final imageUrl = p['image_url'] ?? p['imageUrl'];
+    final caption = p['caption'] ?? '';
+    final username = p['username'] ?? '';
+    final currentUser = Supabase.instance.client.auth.currentUser?.id;
+    final showFollow = _authorId.isNotEmpty && currentUser != null && _authorId != currentUser;
 
-    return AspectRatio(
-      aspectRatio: _controller.value.aspectRatio,
-      child: VideoPlayer(_controller),
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          imageUrl != null && imageUrl.toString().isNotEmpty
+              ? Image.network(imageUrl)
+              : Container(height: 180, color: Colors.grey.shade200),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(caption.toString(), maxLines: 2, overflow: TextOverflow.ellipsis),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(_liked ? Icons.favorite : Icons.favorite_border, color: _liked ? Colors.red : null),
+                  onPressed: _toggleLike,
+                ),
+                Text('$_likes'),
+                const SizedBox(width: 8),
+                const Icon(Icons.comment_outlined),
+                const SizedBox(width: 4),
+                Text('$_comments'),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(12)),
+                  child: Text('Vibing Now: ${_vibes}'),
+                ),
+              ],
+            ),
+          ),
+          if (showFollow)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+              child: ElevatedButton(onPressed: _toggleFollowAuthor, child: Text(_isFollowing ? 'Following' : 'Follow')),
+            ),
+        ],
+      ),
     );
   }
 }

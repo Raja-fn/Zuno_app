@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-import '../../core/design/zuno_colors.dart';
-import '../../core/design/zuno_spacing.dart';
-import '../../core/design/zuno_text.dart';
-import '../../shared/ui/zuno_button.dart';
-import '../../shared/ui/zuno_input.dart';
-import '../../services/profile_service.dart';
+import '../../services/auth_service.dart';
 import '../navigation/main_navigation.dart';
+import 'login_screen.dart';
 import '../profile/profile_setup_screen.dart';
+
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -18,115 +13,127 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final emailCtrl = TextEditingController();
+  final passCtrl = TextEditingController();
+  final usernameCtrl = TextEditingController();
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
+  bool loading = false;
+
+  Future<void> _signup() async {
+    setState(() => loading = true);
+
+    try {
+      await AuthService().signUp(
+        email: emailCtrl.text.trim(),
+        password: passCtrl.text.trim(),
+        username: usernameCtrl.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const ProfileSetupScreen(),
+        ),
+      );
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ZunoColors.background,
+      backgroundColor: const Color(0xFFF9F9F9),
       body: SafeArea(
         child: Padding(
-          padding: EdgeInsets.all(ZunoSpacing.lg),
+          padding: const EdgeInsets.all(20),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const SizedBox(height: 40),
-
-              /// Title
-              Text(
-                "Create account ✨",
-                style: ZunoText.heading(),
+              const Text(
+                "ZUNO",
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                ),
               ),
-
-              const SizedBox(height: 8),
-
-              Text(
-                "Join Zuno and start sharing",
-                style: ZunoText.bodyMuted(),
-              ),
-
-              const SizedBox(height: 40),
-
-              /// Full name
-              ZunoInput(
-                hint: "Full name",
-                controller: _nameController,
-              ),
-
-              /// Email
-              ZunoInput(
-                hint: "Email address",
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-              ),
-
-              /// Password
-              ZunoInput(
-                hint: "Password",
-                controller: _passwordController,
-                isPassword: true,
-              ),
-
               const SizedBox(height: 24),
 
-              /// Signup Button
-              ZunoButton(
-                text: "Sign up",
-                onPressed: () async {
-                  final fullName = _nameController.text.trim();
-                  final email = _emailController.text.trim();
-                  final password = _passwordController.text.trim();
-
-                  if (email.isEmpty || password.isEmpty || fullName.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Fill all fields")),
-                    );
-                    return;
-                  }
-
-                  try {
-                    // 1️⃣ Create auth user
-                    await Supabase.instance.client.auth.signUp(
-                      email: email,
-                      password: password,
-                    );
-
-                    // 2️⃣ Create profile
-                    final profileService = ProfileService();
-                    await profileService.createProfile(
-                      username: email.split('@')[0],
-                      fullName: fullName,
-                    );
-
-                    if (!context.mounted) return;
-
-                    // 3️⃣ Navigate to dashboard
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
-                    );
-                  } on AuthException catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(e.message)),
-                    );
-                  } catch (e) {
-        debugPrint("SIGNUP ERROR: $e");
-        ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-        );
-        }
-                },
+              // EMAIL
+              TextField(
+                controller: emailCtrl,
+                decoration: const InputDecoration(
+                  hintText: "Email",
+                  filled: true,
+                ),
               ),
+              const SizedBox(height: 12),
+
+              // USERNAME
+              TextField(
+                controller: usernameCtrl,
+                decoration: const InputDecoration(
+                  hintText: "Username",
+                  filled: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // PASSWORD
+              TextField(
+                controller: passCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  hintText: "Password",
+                  filled: true,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // SIGNUP BUTTON
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: loading ? null : _signup,
+                  child: loading
+                      ? const CircularProgressIndicator()
+                      : const Text("Sign up"),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // LOGIN LINK
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("Already have an account? "),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const LoginScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      "Login",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                ],
+              )
             ],
           ),
         ),

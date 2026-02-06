@@ -25,15 +25,42 @@ class PostService {
   }
 
   // ─────────────────────────
-  // NORMAL FEED (PAGINATED)
+  // SIMPLE FEED
+  // ─────────────────────────
+  Future<List<PostModel>> fetchPosts() async {
+    final currentUserId = _supabase.auth.currentUser?.id;
+
+    final res = await _supabase
+        .from('posts')
+        .select('''
+          id,
+          image_url,
+          caption,
+          username,
+          created_at,
+          likes_count,
+          comments_count,
+          likes(user_id)
+        ''')
+        .order('created_at', ascending: false);
+
+    return res
+        .map<PostModel>(
+          (e) => PostModel.fromMap(e, currentUserId: currentUserId),
+    )
+        .toList();
+  }
+
+  // ─────────────────────────
+  // PAGINATED FEED
   // ─────────────────────────
   Future<List<PostModel>> fetchPostsPaged({
     required int limit,
     required int offset,
   }) async {
-    final userId = _supabase.auth.currentUser?.id;
+    final currentUserId = _supabase.auth.currentUser?.id;
 
-    final response = await _supabase
+    final res = await _supabase
         .from('posts')
         .select('''
           id,
@@ -43,46 +70,60 @@ class PostService {
           created_at,
           likes_count,
           comments_count,
-          likes ( user_id )
+          likes(user_id)
         ''')
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
 
-    return response.map<PostModel>((e) {
-      return PostModel.fromMap(e, currentUserId: userId);
-    }).toList();
+    return res
+        .map<PostModel>(
+          (e) => PostModel.fromMap(e, currentUserId: currentUserId),
+    )
+        .toList();
   }
 
-  // ─────────────────────────
-  // SIMPLE FEED (NON-PAGINATED)
-  // ─────────────────────────
-  Future<List<PostModel>> fetchPosts() async {
+  // Like toggling for a post by current user
+  Future<void> toggleLike(String postId) async {
     final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    final res = await _supabase.from('likes').select('id').eq('post_id', postId).eq('user_id', userId).maybeSingle();
+    if (res != null && res['id'] != null) {
+      await _supabase.from('likes').delete().eq('id', res['id']);
+    } else {
+      await _supabase.from('likes').insert({'post_id': postId, 'user_id': userId});
+    }
+  }
 
-    final response = await _supabase
-        .from('posts')
-        .select('''
-          id,
-          image_url,
-          caption,
-          username,
-          created_at,
-          likes_count,
-          comments_count,
-          likes ( user_id )
-        ''')
-        .order('created_at', ascending: false);
-
-    return response.map<PostModel>((e) {
-      return PostModel.fromMap(e, currentUserId: userId);
-    }).toList();
+  // Lightweight helper for simple post creation API
+  Future<void> createPostSimple({required String caption, String? imageUrl}) async {
+    final userId = _supabase.auth.currentUser!.id;
+    await _supabase.from('posts').insert({
+      'user_id': userId,
+      'caption': caption,
+      'image_url': imageUrl,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
   }
 
   // ─────────────────────────
-  // PROFILE FEED
+  // REELS FEED (VIDEOS)
+  // ─────────────────────────
+  Future<List<PostModel>> fetchReelsPaged({
+    required int limit,
+    required int offset,
+  }) async {
+    // For now, fetch posts and filter those with a non-null video_url
+    final all = await fetchPostsPaged(limit: limit, offset: offset);
+    return all.where((p) => p.videoUrl != null && p.videoUrl!.isNotEmpty).toList();
+  }
+
+  // ─────────────────────────
+  // PROFILE POSTS
   // ─────────────────────────
   Future<List<PostModel>> fetchPostsByUser(String userId) async {
-    final response = await _supabase
+    final currentUserId = _supabase.auth.currentUser?.id;
+
+    final res = await _supabase
         .from('posts')
         .select('''
           id,
@@ -92,14 +133,16 @@ class PostService {
           created_at,
           likes_count,
           comments_count,
-          likes ( user_id )
+          likes(user_id)
         ''')
         .eq('user_id', userId)
         .order('created_at', ascending: false);
 
-    return response.map<PostModel>((e) {
-      return PostModel.fromMap(e, currentUserId: userId);
-    }).toList();
+    return res
+        .map<PostModel>(
+          (e) => PostModel.fromMap(e, currentUserId: currentUserId),
+    )
+        .toList();
   }
 
   // ─────────────────────────
@@ -108,36 +151,37 @@ class PostService {
   Future<List<PostModel>> fetchTrendingPosts({
     required int limit,
   }) async {
-    final userId = _supabase.auth.currentUser?.id;
+    final currentUserId = _supabase.auth.currentUser?.id;
 
-    final response = await _supabase.rpc(
-      'get_trending_posts',
-      params: {'limit_count': limit},
-    );
+    final res = await _supabase
+        .from('posts')
+        .select('''
+          id,
+          image_url,
+          caption,
+          username,
+          created_at,
+          likes_count,
+          comments_count,
+          likes(user_id)
+        ''')
+        .order('likes_count', ascending: false)
+        .limit(limit);
 
-    return response.map<PostModel>((e) {
-      return PostModel.fromMap(e, currentUserId: userId);
-    }).toList();
+    return res
+        .map<PostModel>(
+          (e) => PostModel.fromMap(e, currentUserId: currentUserId),
+    )
+        .toList();
   }
 
   // ─────────────────────────
-  // PERSONALIZED FEED
+  // PERSONALIZED FEED (fallback logic)
   // ─────────────────────────
   Future<List<PostModel>> fetchPersonalizedFeed({
     required int limit,
   }) async {
-    final userId = _supabase.auth.currentUser!.id;
-
-    final response = await _supabase.rpc(
-      'get_personalized_feed',
-      params: {
-        'uid': userId,
-        'limit_count': limit,
-      },
-    );
-
-    return response.map<PostModel>((e) {
-      return PostModel.fromMap(e, currentUserId: userId);
-    }).toList();
+    // For now: same as trending / recent
+    return fetchTrendingPosts(limit: limit);
   }
 }

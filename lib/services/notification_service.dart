@@ -1,23 +1,24 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class NotificationService {
-  final _client = Supabase.instance.client;
+  final _supabase = Supabase.instance.client;
 
-  /// 🔔 REALTIME NOTIFICATIONS
-  Stream<List<Map<String, dynamic>>> streamNotifications(
-      String userId) {
-    return _client
+  Future<List<Map<String, dynamic>>> fetchNotifications() async {
+    final userId = _supabase.auth.currentUser!.id;
+
+    final res = await _supabase
         .from('notifications')
-        .stream(primaryKey: ['id'])
+        .select('*, actor:profiles(username)')
         .eq('user_id', userId)
         .order('created_at', ascending: false);
+
+    return List<Map<String, dynamic>>.from(res);
   }
 
-  /// 👁️ MARK AS READ
-  Future<void> markAsRead(String notificationId) async {
-    await _client
+  Future<void> markAsRead(String id) async {
+    await _supabase
         .from('notifications')
         .update({'is_read': true})
-        .eq('id', notificationId);
+        .eq('id', id);
   }
 }
